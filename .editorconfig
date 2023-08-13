@@ -1,0 +1,55 @@
+[*.{cs,vb}]
+csharp_new_line_before_open_brace = none
+csharp_new_line_before_else = false
+indent_size = 2
+indent_style = space
+end_of_line = lf
+
+dotnet_naming_style.snake_case.capitalization = all_lower
+dotnet_naming_style.snake_case.word_separator = _
+
+dotnet_naming_style.snake_case_upper.capitalization = all_upper
+dotnet_naming_style.snake_case_upper.word_separator = _
+
+dotnet_naming_style._snake_case.capitalization = all_lower
+dotnet_naming_style._snake_case.word_separator = _
+dotnet_naming_style._snake_case.required_prefix = _
+
+dotnet_naming_symbols.method.applicable_kinds = method
+dotnet_naming_symbols.method.applicable_accessibilities = *
+dotnet_naming_rule.method_should_be_snake_case.style = snake_case
+dotnet_naming_rule.method_should_be_snake_case.symbols = method
+dotnet_naming_rule.method_should_be_snake_case.severity = warning
+
+dotnet_naming_symbols.local.applicable_kinds = local
+dotnet_naming_symbols.local.applicable_accessibilities = *
+dotnet_naming_rule.local_should_be_snake_case.style = snake_case
+dotnet_naming_rule.local_should_be_snake_case.symbols = local
+dotnet_naming_rule.local_should_be_snake_case.severity = warning
+
+dotnet_naming_symbols.const.applicable_kinds = field
+dotnet_naming_symbols.const.applicable_accessibilities = *
+dotnet_naming_symbols.const.required_modifiers = const
+dotnet_naming_rule.const_should_be_snake_case.style = snake_case_upper
+dotnet_naming_rule.const_should_be_snake_case.symbols = const
+dotnet_naming_rule.const_should_be_snake_case.severity = warning
+
+
+dotnet_naming_symbols.property.applicable_kinds = property
+dotnet_naming_symbols.property.applicable_accessibilities = *
+dotnet_naming_rule.property_should_be_snake_case.style = snake_case
+dotnet_naming_rule.property_should_be_snake_case.symbols = property
+dotnet_naming_rule.property_should_be_snake_case.severity = warning
+
+
+dotnet_naming_symbols.field.applicable_kinds = field
+dotnet_naming_symbols.field.applicable_accessibilities = public, internal
+dotnet_naming_rule.field_should_be_snake_case.style = snake_case
+dotnet_naming_rule.field_should_be_snake_case.symbols = field
+dotnet_naming_rule.field_should_be_snake_case.severity = warning
+
+dotnet_naming_symbols.private_field.applicable_kinds = field
+dotnet_naming_symbols.private_field.applicable_accessibilities = private, protected, protected_internal, private_protected
+dotnet_naming_rule.private_field_should_starts_with_underscore.style = _snake_case
+dotnet_naming_rule.private_field_should_starts_with_underscore.symbols = private_field
+dotnet_naming_rule.private_field_should_starts_with_underscore.severity = warning
