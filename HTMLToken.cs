@@ -10,6 +10,14 @@ class HTMLToken {
   readonly Tag? _tag;
   readonly Data? _comment_or_character;
 
+  public bool is_start_tag_of(params string[] names) {
+    return _type == Type.StartTag && names.Contains(tag!.name);
+  }
+
+  public bool is_end_tag_of(params string[] names) {
+    return _type == Type.EndTag && names.Contains(tag!.name);
+  }
+
   // A character token that is one of U+0009 CHARACTER TABULATION, U+000A LINE FEED (LF), U+000C FORM FEED (FF), U+000D CARRIAGE RETURN (CR), or U+0020 SPACE
   public bool is_space_character {
     get {
@@ -42,7 +50,7 @@ class HTMLToken {
     public string? system_identifier { get { return _system_identifier?.ToString(); } }
     public bool force_quirks = false;
     public override string ToString() {
-      return $"{{name: '{name}', public_identifier: '{_public_identifier?.ToString()}', system_public_identifier: '{_system_identifier?.ToString()}', force_quirks: {force_quirks}}}";
+      return $"{{name: '{name}', public_identifier: '{_public_identifier?.ToString() ?? "null"}', system_public_identifier: '{_system_identifier?.ToString() ?? "null"}', force_quirks: {force_quirks}}}";
     }
     public void append_to_name(int codepoint) {
       _name.Append((char)codepoint);
@@ -149,5 +157,9 @@ class HTMLToken {
 
   public bool is_eof() {
     return _type == Type.EndOfFile;
+  }
+
+  public string? get_attribute_value(string name) {
+    return _tag!.attributes?.Find(attr => attr.name.ToString() == name)?.value?.ToString();
   }
 }

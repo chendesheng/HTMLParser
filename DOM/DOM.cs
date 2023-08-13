@@ -23,14 +23,10 @@ class DOMException : Exception {
 class NotFoundError : DOMException { }
 class HierarchyRequestError : DOMException { }
 
-class Attr : Node {
-  public string name { get; private set; }
-  public string value { get; private set; }
-  public Element? owner_element { get { return null; } }
-}
 
 // https://dom.spec.whatwg.org/#interface-characterdata
 class CharacterData : Node {
+  public CharacterData(Document document) : base(document) {}
   public string data { get; set; }
   public ulong length { get; }
   public string substring_data(ulong offset, ulong count) { return ""; }
@@ -41,41 +37,21 @@ class CharacterData : Node {
 }
 
 // https://dom.spec.whatwg.org/#interface-comment 
-class Comment : CharacterData { }
-
-// https://dom.spec.whatwg.org/#interface-processinginstruction
-class ProcessingInstruction : CharacterData { }
-
-class Text : CharacterData {
-  public Text(string data = "") { }
-  public Text split_text(ulong offset) {
-    return new Text();
-  }
-  public string whole_text { get { return ""; } }
+class Comment : CharacterData {
+  public Comment(Document document) : base(document) {}
 }
 
-class Element : Node {
-  public string? namespace_uri { get { return null; } }
-  public string tag_name { get; private set; }
+// https://dom.spec.whatwg.org/#interface-processinginstruction
+class ProcessingInstruction : CharacterData {
+  public ProcessingInstruction(Document document) : base(document) {}
+}
 
-  public HTMLCollection get_elements_by_tag_name(string qualifiedName) {
-    throw new NotImplementedException();
+class Text : CharacterData {
+  public Text(Document document, string data = "") : base(document) { }
+  public Text split_text(ulong offset) {
+    return new Text(node_document);
   }
-
-  public void set_attribute(string qualified_name, string value) { }
-  public string get_attribute(string qualified_name) { return ""; }
-  public void set_attribute_node(Attr attr) { }
-  public Attr get_attribute_node(string qualified_name) { return new Attr(); }
-  public bool toggle_attribute(string qualified_name) { return false; }
-  public bool has_attribute(string qualified_name) { return false; }
-
-  internal void set_node_document_to_attributes(Document? document) {
-    foreach (var attr in _attributes) {
-      attr.owner_document = document;
-    }
-  }
-
-  List<Attr> _attributes = new();
+  public string whole_text { get { return ""; } }
 }
 
 interface HTMLOrSVGElement {
@@ -83,24 +59,12 @@ interface HTMLOrSVGElement {
   bool autofocus { get; set; }
 }
 
-class HTMLElement : Element, HTMLOrSVGElement {
-  public string title { get; set; }
-  public string lang { get; set; }
-
-  public bool? hidden { get; set; }
-  public string inner_text { get; set; }
-  public string outer_text { get; set; }
-  public long tab_index { get; set; }
-  public bool autofocus { get; set; }
+class DocumentFragment : Node {
+  public DocumentFragment(Document document) : base(document) {}
 }
-
-class HTMLHeadElement : HTMLElement {
-}
-
-class DocumentFragment : Node { }
 
 class DocumentType : Node {
-  public DocumentType(string name, string public_id, string system_id) {
+  public DocumentType(Document document, string name, string public_id, string system_id) : base(document) {
     this.name = name;
     this.public_id = public_id;
     this.system_id = system_id;

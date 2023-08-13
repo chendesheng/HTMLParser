@@ -6,11 +6,6 @@ class HTMLTokenizer {
     _input = input;
   }
 
-  public void reprocess_token(HTMLToken token) {
-    _emitted_tokens.Remove(token);
-    _emitting_tokens.Prepend(token);
-  }
-
   public HTMLToken next_token() {
     while (true) {
       if (_emitting_tokens.Count > 0) {

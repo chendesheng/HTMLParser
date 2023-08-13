@@ -14,13 +14,26 @@ class Node : EventTarget {
   public const ushort DOCUMENT_FRAGMENT_NODE = 11;
   public const ushort NOTATION_NODE = 12; // legacy
 
+  public Node(Document node_document) {
+    this.node_document = node_document;
+  }
+
   public ushort node_type { get; private set; }
   public string node_name { get; set; }
 
   public bool is_connected { get { return false; } }
-  public Document? owner_document { get; set; }
-  public Node? parent_node { get { return null; } }
-  public Element? parent_element { get { return parent_node as Element; } }
+  public Document node_document { get; set; }
+  // https://dom.spec.whatwg.org/#dom-node-ownerdocument
+  public Document? owner_document {
+    get {
+      if (this is Document) return null;
+      return node_document;
+    }
+  }
+
+  private Node? _parent = null;
+  public Node? parent_node { get { return _parent; } }
+  public Element? parent_element { get { return _parent as Element; } }
 
   public bool has_child_nodes => _children.Count > 0;
 
@@ -151,7 +164,7 @@ class Node : EventTarget {
     // 11. If child’s parent is non-null, then:
     if (child.parent_node != null) {
       // Set removedNodes to « child ».
-      removed_nodes.Append(child);
+      removed_nodes.Add(child);
 
       // Remove child with the suppress observers flag set.
       remove_node(child);
@@ -278,7 +291,9 @@ class Node : EventTarget {
 
   // https://dom.spec.whatwg.org/#concept-node-insert
   private static void insert_node_into_parent_before_child(Node node, Node parent, Node? child) {
+    Console.WriteLine($"insert_node_into_parent_before_child({node}, {parent}, {child}");
     // To insert a node into a parent before a child, with an optional suppress observers flag, run these steps:
+    // FIXME: add optional suppress observers flag
 
     // 1. Let nodes be node’s children, if node is a DocumentFragment node; otherwise « node ».
     var nodes = node is DocumentFragment ? node._children : new List<Node> { node };
@@ -306,10 +321,12 @@ class Node : EventTarget {
     // 7. For each node in nodes, in tree order:
     foreach (var nd in nodes) {
       // 1. Adopt node into parent’s node document.
-      adopt_node_into_document(nd, parent.owner_document);
+      adopt_node_into_document(nd, parent.node_document);
       // 2. If child is null, then append node to parent’s children.
       if (child == null) {
+        Console.WriteLine($"append_ordered_set({nd}, {parent._children}");
         append_ordered_set(nd, parent._children);
+        Console.WriteLine($"{parent}.children: {parent._children.Count}");
       } else {
         // 3. Otherwise, insert node into parent’s children before child’s index.
         parent._children.Insert(child.index, nd);
@@ -338,20 +355,20 @@ class Node : EventTarget {
   private static void append_ordered_set(Node node, List<Node> children) {
     // To append to an ordered set: if the set contains the given item, then do nothing; otherwise, perform the normal list append operation.
     if (children.Contains(node)) return;
-    children.Append(node);
+    children.Add(node);
   }
 
   // https://dom.spec.whatwg.org/#concept-node-adopt
   private static void adopt_node_into_document(Node node, Document? document) {
     // 1. Let oldDocument be node’s node document.
-    var old_document = node.owner_document;
+    var old_document = node.node_document;
     // 2. If node’s parent is non-null, then remove node.
     if (node.parent_node != null) remove_node(node);
     if (document != old_document) {
       // For each inclusiveDescendant in node’s shadow-including inclusive descendants:
       foreach (var descendant in node.shadow_including_inclusive_descendants()) {
         // Set inclusiveDescendant’s node document to document.
-        descendant.owner_document = document;
+        descendant.node_document = document;
 
         // If inclusiveDescendant is an element, then set the node document of each attribute in inclusiveDescendant’s attribute list to document.
         if (descendant is Element ele) {
@@ -473,5 +490,28 @@ class Node : EventTarget {
     get {
       return false;
     }
+  }
+
+  protected virtual String display_name {
+    get {
+      return this.GetType().ToString();
+    }
+  } 
+
+  protected String to_string(int indent) {
+    var sb = new StringBuilder();
+    for (var i = 0; i < indent * 2; ++i) sb.Append(' '); 
+    sb.AppendLine($"[{display_name}]");
+    if (has_child_nodes) {
+      Console.WriteLine($"to_string: {_children}");
+      foreach(var child in _children) {
+        sb.Append(child.to_string(indent + 1));
+      }
+    }
+    return sb.ToString();
+  }
+
+  public override String ToString() {
+    return to_string(0);
   }
 }
