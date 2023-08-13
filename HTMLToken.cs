@@ -18,6 +18,14 @@ class HTMLToken {
     return _type == Type.EndTag && names.Contains(tag!.name);
   }
 
+  public bool is_end_tag {
+    get { return _type == Type.EndTag; }
+  }
+
+  public bool is_start_tag {
+    get { return _type == Type.StartTag; }
+  }
+
   // A character token that is one of U+0009 CHARACTER TABULATION, U+000A LINE FEED (LF), U+000C FORM FEED (FF), U+000D CARRIAGE RETURN (CR), or U+0020 SPACE
   public bool is_space_character {
     get {

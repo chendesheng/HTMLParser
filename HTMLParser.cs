@@ -16,7 +16,14 @@ class HTMLParser {
 
   InsertionMode _insertion_mode = InsertionMode.Initial;
   Document _document = new();
+  // Initially, the stack of open elements is empty. The stack grows downwards;
+  //   the topmost node on the stack is the first one added to the stack,
+  //   and the bottommost node of the stack is the most recently added node in the stack
+  //   (notwithstanding when the stack is manipulated in a random access fashion as part of the handling for misnested tags).
   Stack<Element> _open_elements = new();
+  Element? _head_element = null;
+  Element? _form_element = null;
+
 
   enum InsertionMode {
     Initial,
@@ -46,6 +53,49 @@ class HTMLParser {
 
   void insert_comment_as_last_child(HTMLToken token) {
     throw new NotImplementedException();
+  }
+
+  void insert_a_comment(HTMLToken token) {
+    throw new NotImplementedException();
+  }
+
+  Node appropriate_place_for_inserting_a_node() {
+    // 1. If there was an override target specified, then let target be the override target.
+    //    Otherwise, let target be the current node.
+    // FIXME: handle override target
+    var target = _open_elements.Peek();
+    // 2. Determine the adjusted insertion location using the first matching steps from the following list:
+    // If foster parenting is enabled and target is a table, tbody, tfoot, thead, or tr element
+    // FIXME
+    // Otherwise
+    //    Let adjusted insertion location be inside target, after its last child (if any).
+    var adjustedInsertionLocation = target;
+
+    // 3. If the adjusted insertion location is inside a template element,
+    //    let it instead be inside the template element's template contents, after its last child (if any).
+    // FIXME
+    // 4. Return the adjusted insertion location.
+    return adjustedInsertionLocation;
+  }
+
+  // https://html.spec.whatwg.org/#insert-a-foreign-element
+  Element insert_a_foreign_element(HTMLToken token, string ns) {
+    // 1. Let the adjusted insertion location be the appropriate place for inserting a node.
+    var adjusted_insertion_location = appropriate_place_for_inserting_a_node();
+    // 2. Let element be the result of creating an element for the token in the given namespace,
+    //    with the intended parent being the element in which the adjusted insertion location finds itself.
+    var element = create_element_for_token(token, adjusted_insertion_location, ns);
+    // 3. If it is possible to insert element at the adjusted insertion location, then:
+    // FIXME: I don't understand what is "possible to insert element at"
+    if (is_possible_to_insert_element_at(adjusted_insertion_location)) {
+      adjusted_insertion_location.append_child(element);
+    }
+    _open_elements.Push(element);
+    return element;
+  }
+
+  bool is_possible_to_insert_element_at(Node location) {
+    return true;
   }
 
   // https://html.spec.whatwg.org/#the-initial-insertion-mode
@@ -193,9 +243,54 @@ class HTMLParser {
     return element;
   }
 
+  // https://html.spec.whatwg.org/#the-before-head-insertion-mode
   void run_before_head_mode() {
-    Console.WriteLine(_document);
-    throw new NotImplementedException();
+    var token = _next_token;
+    if (token.is_space_character) {
+      // Ignore the token.
+      return;
+    }
+    if (token.is_comment) {
+      // Insert a comment
+      insert_a_comment(token);
+      return;
+    }
+    if (token.is_doctype) {
+      // Parse error. Ignore the token.
+      on_error("parse error");
+      return;
+    }
+    if (token.is_start_tag_of("html")) {
+      throw new NotImplementedException();
+    }
+    if (token.is_start_tag_of("head")) {
+      // Insert an HTML element for the token.
+      // https://html.spec.whatwg.org/#insert-an-html-element
+      var element = insert_a_foreign_element(token, Namespaces.HTML);
+      // Set the head element pointer to the newly created head element.
+      _head_element = element;
+      // Switch the insertion mode to "in head".
+      _insertion_mode = InsertionMode.InHead;
+      return;
+    }
+    if (token.is_end_tag_of("head", "body", "html", "br")) {
+      // Act as described in the "anything else" entry below.
+    } else if (token.is_end_tag) {
+      // Parse error. Ignore the token.
+      on_error("parse error");
+      return;
+    }
+    // Insert an HTML element for a "head" start tag token with no attributes.
+    var ele = insert_a_foreign_element(token, Namespaces.HTML);
+
+    // Set the head element pointer to the newly created head element.
+    _head_element = ele;
+
+    // Switch the insertion mode to "in head".
+    _insertion_mode = InsertionMode.InHead;
+
+    // Reprocess the current token.
+    reprocess_token();
   }
   void run_in_head_mode() {
     throw new NotImplementedException();
