@@ -69,13 +69,13 @@ class HTMLParser {
     // FIXME
     // Otherwise
     //    Let adjusted insertion location be inside target, after its last child (if any).
-    var adjustedInsertionLocation = target;
+    var adjusted_insertion_location = target;
 
     // 3. If the adjusted insertion location is inside a template element,
     //    let it instead be inside the template element's template contents, after its last child (if any).
     // FIXME
     // 4. Return the adjusted insertion location.
-    return adjustedInsertionLocation;
+    return adjusted_insertion_location;
   }
 
   // https://html.spec.whatwg.org/#insert-a-foreign-element
