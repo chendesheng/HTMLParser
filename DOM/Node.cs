@@ -526,4 +526,12 @@ class Node : EventTarget {
   public override String ToString() {
     return to_string(0);
   }
+
+  public bool is_element_of(params string[] tag_names) {
+    if (this is HTMLElement element) {
+      return tag_names.Contains(element.tag_name);
+    } else {
+      return false;
+    }
+  }
 }

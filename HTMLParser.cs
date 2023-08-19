@@ -28,6 +28,7 @@ class HTMLParser {
   int _script_nesting_level = 0;
   bool _parser_pause_flag = false;
   private HTMLParser? _active_speculative_html_parser = null;
+  private bool _forster_parenting_enabled = false;
 
   Node current_node { get { return _open_elements.Peek(); } }
   void pop_current_node() {
@@ -69,14 +70,37 @@ class HTMLParser {
     throw new NotImplementedException();
   }
 
-  Node appropriate_place_for_inserting_a_node() {
+  // https://html.spec.whatwg.org/#appropriate-place-for-inserting-a-node
+  Node find_appropriate_place_for_inserting_a_node() {
     // 1. If there was an override target specified, then let target be the override target.
     //    Otherwise, let target be the current node.
     // FIXME: handle override target
     var target = current_node;
     // 2. Determine the adjusted insertion location using the first matching steps from the following list:
     // If foster parenting is enabled and target is a table, tbody, tfoot, thead, or tr element
-    // FIXME
+    if (_forster_parenting_enabled && target.is_element_of("table", "tbody", "tfoot" ,"thead", "tr")) {
+      // 1. Let last template be the last template element in the stack of open elements, if any.
+      // TODO
+
+      // 2. Let last table be the last table element in the stack of open elements, if any.
+      var last_table = _open_elements.LastOrDefault(e => e.is_element_of("table"));
+
+      // 3. If there is a last template and either there is no last table, or there is one, but last template is lower (more recently added) than last table in the stack of open elements, then: let adjusted insertion location be inside last template's template contents, after its last child (if any), and abort these steps.
+
+      // 4. If there is no last table, then let adjusted insertion location be inside the first element in the stack of open elements (the html element), after its last child (if any), and abort these steps. (fragment case)
+
+      // 5. If last table has a parent node, then let adjusted insertion location be inside last table's parent node, immediately before last table, and abort these steps.
+      if (last_table?.parent_node != null) {
+        throw new NotImplementedException();
+      }
+
+      // 6. Let previous element be the element immediately above last table in the stack of open elements.
+      var previous_element = _open_elements.SkipWhile(e => e != last_table).Skip(1).FirstOrDefault();
+
+      // 7. Let adjusted insertion location be inside previous element, after its last child (if any).
+      if (previous_element != null) return previous_element;
+    }
+
     // Otherwise
     //    Let adjusted insertion location be inside target, after its last child (if any).
     var adjusted_insertion_location = target;
@@ -84,6 +108,7 @@ class HTMLParser {
     // 3. If the adjusted insertion location is inside a template element,
     //    let it instead be inside the template element's template contents, after its last child (if any).
     // FIXME
+
     // 4. Return the adjusted insertion location.
     return adjusted_insertion_location;
   }
@@ -91,7 +116,7 @@ class HTMLParser {
   // https://html.spec.whatwg.org/#insert-a-foreign-element
   Element insert_a_foreign_element(HTMLToken token, string ns) {
     // 1. Let the adjusted insertion location be the appropriate place for inserting a node.
-    var adjusted_insertion_location = appropriate_place_for_inserting_a_node();
+    var adjusted_insertion_location = find_appropriate_place_for_inserting_a_node();
     // 2. Let element be the result of creating an element for the token in the given namespace,
     //    with the intended parent being the element in which the adjusted insertion location finds itself.
     var element = create_element_for_token(token, adjusted_insertion_location, ns);
@@ -109,8 +134,7 @@ class HTMLParser {
   }
 
   // https://html.spec.whatwg.org/#the-initial-insertion-mode
-  void run_initial_mode() {
-    var token = _next_token;
+  void run_initial_mode(HTMLToken token) {
     // A character token that is one of U+0009 CHARACTER TABULATION, U+000A LINE FEED (LF), U+000C FORM FEED (FF), U+000D CARRIAGE RETURN (CR), or U+0020 SPACE
     if (token.is_space_character) {
       // Ignore the token.
@@ -160,8 +184,7 @@ class HTMLParser {
   }
 
   // https://html.spec.whatwg.org/#the-before-html-insertion-mode
-  void run_before_html_mode() {
-    var token = _next_token;
+  void run_before_html_mode(HTMLToken token) {
     if (token.is_doctype) {
       // Parse error. Ignore the token.
       on_error("parse error");
@@ -254,8 +277,7 @@ class HTMLParser {
   }
 
   // https://html.spec.whatwg.org/#the-before-head-insertion-mode
-  void run_before_head_mode() {
-    var token = _next_token;
+  void run_before_head_mode(HTMLToken token) {
     if (token.is_space_character) {
       // Ignore the token.
       return;
@@ -327,44 +349,44 @@ class HTMLParser {
   }
 
   // https://html.spec.whatwg.org/#parsing-main-inhead
-  void run_in_head_mode() {
-    Console.WriteLine($"run_in_head_mode() {_next_token}");
-    if (_next_token.is_space_character) {
-      insert_a_character(_next_token.comment_or_character.data);
+  void run_in_head_mode(HTMLToken token) {
+    Console.WriteLine($"run_in_head_mode(HTMLToken token) {token}");
+    if (token.is_space_character) {
+      insert_a_character(token.comment_or_character.data);
       return;
     }
-    if (_next_token.is_comment) {
-      insert_a_comment(_next_token);
+    if (token.is_comment) {
+      insert_a_comment(token);
       return;
     }
-    if (_next_token.is_doctype) {
+    if (token.is_doctype) {
       on_error("parse error");
       return;
     }
 
-    if (_next_token.is_start_tag_of("html")) {
+    if (token.is_start_tag_of("html")) {
       // Process the token using the rules for the "in body" insertion mode.
-      run_in_body_mode();
+      run_in_body_mode(token);
     }
 
     // A start tag whose tag name is one of: "base", "basefont", "bgsound", "link"
-    if (_next_token.is_start_tag_of("base", "basefont", "bgsound", "link")) {
+    if (token.is_start_tag_of("base", "basefont", "bgsound", "link")) {
       // Insert an HTML element for the token. Immediately pop the current node off the stack of open elements.
-      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      insert_a_foreign_element(token, Namespaces.HTML);
       pop_current_node();
       // Acknowledge the token's self-closing flag, if it is set.
-      if (_next_token.is_self_closing) {
+      if (token.is_self_closing) {
         acknowledge_self_closing_flag();
       }
       return;
     }
     // A start tag whose tag name is "meta"
-    if (_next_token.is_start_tag_of("meta")) {
+    if (token.is_start_tag_of("meta")) {
       // Insert an HTML element for the token. Immediately pop the current node off the stack of open elements.
-      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      insert_a_foreign_element(token, Namespaces.HTML);
       pop_current_node();
       // Acknowledge the token's self-closing flag, if it is set.
-      if (_next_token.is_self_closing) {
+      if (token.is_self_closing) {
         acknowledge_self_closing_flag();
       }
 
@@ -378,37 +400,37 @@ class HTMLParser {
     }
 
     // A start tag whose tag name is "title"
-    if (_next_token.is_start_tag_of("title")) {
+    if (token.is_start_tag_of("title")) {
       // Follow the generic RCDATA element parsing algorithm.
       // https://html.spec.whatwg.org/#generic-rcdata-element-parsing-algorithm
-      parse_element_contain_only_text(_next_token, is_raw_text:false);
+      parse_element_contain_only_text(token, is_raw_text:false);
       return;
     }
 
     // A start tag whose tag name is "noscript", if the scripting flag is enabled
     // A start tag whose tag name is one of: "noframes", "style"
-    if (_next_token.is_start_tag_of("noscript", "noframes", "style")) {
+    if (token.is_start_tag_of("noscript", "noframes", "style")) {
       // Follow the generic raw text element parsing algorithm.
       // https://html.spec.whatwg.org/#generic-raw-text-element-parsing-algorithm
-      parse_element_contain_only_text(_next_token, is_raw_text:true);
+      parse_element_contain_only_text(token, is_raw_text:true);
       return;
     }
 
     // A start tag whose tag name is "noscript", if the scripting flag is disabled
-    if (_next_token.is_start_tag_of("noscript")) {
+    if (token.is_start_tag_of("noscript")) {
       // Insert an HTML element for the token.
-      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      insert_a_foreign_element(token, Namespaces.HTML);
       // Switch the insertion mode to "in head noscript".
       _insertion_mode = InsertionMode.InHeadNoscript;
       return;
     }
 
     // A start tag whose tag name is "script"
-    if (_next_token.is_start_tag_of("script")) {
+    if (token.is_start_tag_of("script")) {
       // 1. Let the adjusted insertion location be the appropriate place for inserting a node.
-      var adjusted_insertion_location = appropriate_place_for_inserting_a_node();;
+      var adjusted_insertion_location = find_appropriate_place_for_inserting_a_node();;
       // 2. Create an element for the token in the HTML namespace, with the intended parent being the element in which the adjusted insertion location finds itself.
-      var element = create_element_for_token(_next_token, adjusted_insertion_location, Namespaces.HTML);
+      var element = create_element_for_token(token, adjusted_insertion_location, Namespaces.HTML);
 
       // 3. Set the element's parser document to the Document, and set the element's force async to false.
       // TODO
@@ -437,7 +459,7 @@ class HTMLParser {
     }
 
     // An end tag whose tag name is "head"
-    if (_next_token.is_end_tag_of("head")) {
+    if (token.is_end_tag_of("head")) {
       // Pop the current node (which will be the head element) off the stack of open elements.
       pop_current_node();
       // Switch the insertion mode to "after head".
@@ -446,12 +468,12 @@ class HTMLParser {
     }
 
     // An end tag whose tag name is one of: "body", "html", "br"
-    if (_next_token.is_end_tag_of("body", "html", "br")) {
+    if (token.is_end_tag_of("body", "html", "br")) {
       // Act as described in the "anything else" entry below.
     }
 
     // A start tag whose tag name is "template"
-    if (_next_token.is_start_tag_of("template")) {
+    if (token.is_start_tag_of("template")) {
       // Insert an HTML element for the token.
       // Insert a marker at the end of the list of active formatting elements.
       // Set the frameset-ok flag to "not ok".
@@ -461,13 +483,13 @@ class HTMLParser {
     }
 
     // An end tag whose tag name is "template"
-    if (_next_token.is_end_tag_of("template")) {
+    if (token.is_end_tag_of("template")) {
       throw new NotImplementedException();
     }
 
     // A start tag whose tag name is "head"
     // Any other end tag
-    if (_next_token.is_start_tag_of("head") || _next_token.is_end_tag) {
+    if (token.is_start_tag_of("head") || token.is_end_tag) {
       // Parse error. Ignore the token.
       on_error("parse error");
       return;
@@ -493,64 +515,68 @@ class HTMLParser {
     // 1. Let data be the characters passed to the algorithm, or, if no characters were explicitly specified, the character of the character token being processed.
     var data = character;
     // 2. Let the adjusted insertion location be the appropriate place for inserting a node.
-    var adjusted_insertion_location = appropriate_place_for_inserting_a_node();
+    var adjusted_insertion_location = find_appropriate_place_for_inserting_a_node();
     // 3. If the adjusted insertion location is in a Document node, then return.
     if (adjusted_insertion_location is Document) return;
-    // 4. If there is a Text node immediately before the adjusted insertion location, then append data to that Text node's data.
-    if (adjusted_insertion_location.previous_sibling is Text text) {
-      text.append_data(data);
+
+    // 4. If there is a Text node immediately before the adjusted insertion location, then append data to that Text node's data. 
+    //    Otherwise, create a new Text node whose data is data and whose node document is the same as that of the element in which the adjusted insertion location finds itself, and insert the newly created node at the adjusted insertion location.
+    if (adjusted_insertion_location.last_child is Text txt) {
+      txt.append_data(data);
       return;
-    }
+    } 
+    var text = new Text(adjusted_insertion_location.node_document, data);
+    adjusted_insertion_location.append_child(text);
   }
 
-  void run_in_head_noscript_mode() {
+  void run_in_head_noscript_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
 
   // https://html.spec.whatwg.org/#the-after-head-insertion-mode
-  void run_after_head_mode() {
-    if (_next_token.is_space_character) {
-      insert_a_character(_next_token.comment_or_character.data);
+  void run_after_head_mode(HTMLToken token) {
+    if (token.is_space_character) {
+      insert_a_character(token.comment_or_character.data);
       return;
     }
-    if (_next_token.is_comment) {
-      insert_a_comment(_next_token);
+    if (token.is_comment) {
+      insert_a_comment(token);
       return;
     }
-    if (_next_token.is_doctype) {
+    if (token.is_doctype) {
       on_error("parse error");
       return;
     }
-    if (_next_token.is_start_tag_of("html")) {
-      run_in_body_mode();
+    if (token.is_start_tag_of("html")) {
+      run_in_body_mode(token);
       return;
     }
-    if (_next_token.is_start_tag_of("body")) {
+    if (token.is_start_tag_of("body")) {
       // Insert an HTML element for the token.
-      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      insert_a_foreign_element(token, Namespaces.HTML);
       // Set the frameset-ok flag to "not ok".
       _frameset_ok = false;
       // Switch the insertion mode to "in body".
       _insertion_mode = InsertionMode.InBody;
       return;
     }
-    if (_next_token.is_start_tag_of("frameset")) {
+    if (token.is_start_tag_of("frameset")) {
       // Insert an HTML element for the token.
-      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      insert_a_foreign_element(token, Namespaces.HTML);
       // Switch the insertion mode to "in frameset".
       _insertion_mode = InsertionMode.InFrameset;
       return;
     }
-    if (_next_token.is_start_tag_of("base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title")) {
+    if (token.is_start_tag_of("base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title")) {
       throw new NotImplementedException();
     }
-    if (_next_token.is_end_tag_of("template")) {
+    if (token.is_end_tag_of("template")) {
       throw new NotImplementedException();
     }
-    if (_next_token.is_end_tag_of("body", "html", "br")) {
+    if (token.is_end_tag_of("body", "html", "br")) {
       // Act as described in the "anything else" entry below.
     }
-    if (_next_token.is_start_tag_of("head") || _next_token.is_end_tag) {
+    if (token.is_start_tag_of("head") || token.is_end_tag) {
       // Parse error. Ignore the token.
       on_error("parse error");
       return;
@@ -563,46 +589,46 @@ class HTMLParser {
     // Reprocess the current token.
     reprocess_token();
   }
-  void run_in_body_mode() {
-    if (_next_token.is_null_character) {
+  void run_in_body_mode(HTMLToken token) {
+    if (token.is_null_character) {
       // Parse error. Ignore the token.
       on_error("parse error");
       return;
     }
-    if (_next_token.is_space_character) {
+    if (token.is_space_character) {
       // Reconstruct the active formatting elements, if any.
       reconstruct_active_formatting_elements();
 
       // Insert the token's character.
-      insert_a_character(_next_token.comment_or_character.data);
+      insert_a_character(token.comment_or_character.data);
       return;
     }
 
-    if (_next_token.is_character) {
+    if (token.is_character) {
       // Reconstruct the active formatting elements, if any.
       reconstruct_active_formatting_elements();
 
       // Insert the token's character.
-      insert_a_character(_next_token.comment_or_character.data);
+      insert_a_character(token.comment_or_character.data);
 
       // Set the frameset-ok flag to "not ok".
       _frameset_ok = false;
       return;
     }
 
-    if (_next_token.is_comment) {
+    if (token.is_comment) {
       // Insert a comment.
-      insert_a_comment(_next_token);
+      insert_a_comment(token);
       return;
     }
 
-    if (_next_token.is_doctype) {
+    if (token.is_doctype) {
       // Parse error. Ignore the token.
       on_error("parse error");
       return;
     }
 
-    if (_next_token.is_start_tag_of("html")) {
+    if (token.is_start_tag_of("html")) {
       // Parse error. Ignore the token.
       on_error("parse error");
       return;
@@ -610,21 +636,21 @@ class HTMLParser {
 
     // A start tag whose tag name is one of: "base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title"
     // An end tag whose tag name is "template"
-    if (_next_token.is_start_tag_of("base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title") || _next_token.is_end_tag_of("template")) {
+    if (token.is_start_tag_of("base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title") || token.is_end_tag_of("template")) {
       // Process the token using the rules for the "in head" insertion mode.
-      run_in_head_mode();
+      run_in_head_mode(token);
       return;
     }
 
-    if (_next_token.is_start_tag_of("body")) {
+    if (token.is_start_tag_of("body")) {
       throw new NotImplementedException();
     }
 
-    if (_next_token.is_start_tag_of("frameset")) {
+    if (token.is_start_tag_of("frameset")) {
       throw new NotImplementedException();
     }
 
-    if (_next_token.is_eof) {
+    if (token.is_eof) {
       // If the stack of template insertion modes is not empty, then process the token using the rules for the "in template" insertion mode.
       // Otherwise, follow these steps:
       // 1. If there is a node in the stack of open elements that is not either a dd element, a dt element, an li element, an optgroup element, an option element, a p element, an rb element, an rp element, an rt element, an rtc element, a tbody element, a td element, a tfoot element, a th element, a thead element, a tr element, the body element, or the html element, then this is a parse error.
@@ -643,19 +669,19 @@ class HTMLParser {
     throw new NotImplementedException();
   }
 
-  void run_text_mode() {
-    if (_next_token.is_character) {
+  void run_text_mode(HTMLToken token) {
+    if (token.is_character) {
       // Insert the token's character.
-      insert_a_character(_next_token.comment_or_character.data);
+      insert_a_character(token.comment_or_character.data);
       return;
     }
-    if (_next_token.is_eof) {
+    if (token.is_eof) {
       // Parse error. Switch the insertion mode to the original insertion mode and reprocess the token.
       on_error("parse error");
       throw new NotImplementedException();
     }
 
-    if (_next_token.is_end_tag_of("script")) {
+    if (token.is_end_tag_of("script")) {
       // If the active speculative HTML parser is null and the JavaScript execution context stack is empty, then perform a microtask checkpoint.
       // TODO
 
@@ -692,7 +718,7 @@ class HTMLParser {
       return;
     }
 
-    if (_next_token.is_end_tag) {
+    if (token.is_end_tag) {
       pop_current_node();
       _insertion_mode = _original_insertion_mode;
       return;
@@ -737,49 +763,49 @@ class HTMLParser {
     }
   }
 
-  void run_in_table_mode() {
+  void run_in_table_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_table_text_mode() {
+  void run_in_table_text_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_caption_mode() {
+  void run_in_caption_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_column_group_mode() {
+  void run_in_column_group_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_table_body_mode() {
+  void run_in_table_body_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_row_mode() {
+  void run_in_row_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_cell_mode() {
+  void run_in_cell_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_select_mode() {
+  void run_in_select_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_select_in_table_mode() {
+  void run_in_select_in_table_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_template_mode() {
+  void run_in_template_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_after_body_mode() {
+  void run_after_body_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_in_frameset_mode() {
+  void run_in_frameset_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_after_frameset_mode() {
+  void run_after_frameset_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_after_after_body_mode() {
+  void run_after_after_body_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
-  void run_after_after_frameset_mode() {
+  void run_after_after_frameset_mode(HTMLToken token) {
     throw new NotImplementedException();
   }
 
@@ -796,73 +822,73 @@ class HTMLParser {
 
       switch (_insertion_mode) {
         case InsertionMode.Initial:
-          run_initial_mode();
+          run_initial_mode(_next_token);
           break;
         case InsertionMode.BeforeHtml:
-          run_before_html_mode();
+          run_before_html_mode(_next_token);
           break;
         case InsertionMode.BeforeHead:
-          run_before_head_mode();
+          run_before_head_mode(_next_token);
           break;
         case InsertionMode.InHead:
-          run_in_head_mode();
+          run_in_head_mode(_next_token);
           break;
         case InsertionMode.InHeadNoscript:
-          run_in_head_noscript_mode();
+          run_in_head_noscript_mode(_next_token);
           break;
         case InsertionMode.AfterHead:
-          run_after_head_mode();
+          run_after_head_mode(_next_token);
           break;
         case InsertionMode.InBody:
-          run_in_body_mode();
+          run_in_body_mode(_next_token);
           break;
         case InsertionMode.Text:
-          run_text_mode();
+          run_text_mode(_next_token);
           break;
         case InsertionMode.InTable:
-          run_in_table_mode();
+          run_in_table_mode(_next_token);
           break;
         case InsertionMode.InTableText:
-          run_in_table_text_mode();
+          run_in_table_text_mode(_next_token);
           break;
         case InsertionMode.InCaption:
-          run_in_caption_mode();
+          run_in_caption_mode(_next_token);
           break;
         case InsertionMode.InColumnGroup:
-          run_in_column_group_mode();
+          run_in_column_group_mode(_next_token);
           break;
         case InsertionMode.InTableBody:
-          run_in_table_body_mode();
+          run_in_table_body_mode(_next_token);
           break;
         case InsertionMode.InRow:
-          run_in_row_mode();
+          run_in_row_mode(_next_token);
           break;
         case InsertionMode.InCell:
-          run_in_cell_mode();
+          run_in_cell_mode(_next_token);
           break;
         case InsertionMode.InSelect:
-          run_in_select_mode();
+          run_in_select_mode(_next_token);
           break;
         case InsertionMode.InSelectInTable:
-          run_in_select_in_table_mode();
+          run_in_select_in_table_mode(_next_token);
           break;
         case InsertionMode.InTemplate:
-          run_in_template_mode();
+          run_in_template_mode(_next_token);
           break;
         case InsertionMode.AfterBody:
-          run_after_body_mode();
+          run_after_body_mode(_next_token);
           break;
         case InsertionMode.InFrameset:
-          run_in_frameset_mode();
+          run_in_frameset_mode(_next_token);
           break;
         case InsertionMode.AfterFrameset:
-          run_after_frameset_mode();
+          run_after_frameset_mode(_next_token);
           break;
         case InsertionMode.AfterAfterBody:
-          run_after_after_body_mode();
+          run_after_after_body_mode(_next_token);
           break;
         case InsertionMode.AfterAfterFrameset:
-          run_after_after_frameset_mode();
+          run_after_after_frameset_mode(_next_token);
           break;
         default:
         break;
