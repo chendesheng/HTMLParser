@@ -23,6 +23,6 @@ Console.WriteLine(document);
 //   if (token.type == HTMLToken.Type.StartTag && token.tag.name == "script") {
 //     tokenizer.switch_to_script_data_state();
 //   }
-// } while (!token.is_eof());
+// } while (!token.is_eof);
 
 

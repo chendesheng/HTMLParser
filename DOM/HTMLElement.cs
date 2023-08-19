@@ -10,6 +10,3 @@ class HTMLElement : Element, HTMLOrSVGElement {
   public bool autofocus { get; set; }
 }
 
-class HTMLHeadElement : HTMLElement {
-  public HTMLHeadElement(Document document, string? ns, string name) : base(document, ns, name) {}
-}

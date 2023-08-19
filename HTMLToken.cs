@@ -5,6 +5,13 @@ class HTMLToken {
     _tag = (type == Type.StartTag || type == Type.EndTag) ? new Tag() : null;
     _comment_or_character = (type == Type.Character || type == Type.Comment) ? new Data() : null;
   }
+  public HTMLToken(Type type, string data) {
+    _type = type;
+    _doctype = type == Type.DOCTYPE ? new DocType(data) : null;
+    _tag = (type == Type.StartTag || type == Type.EndTag) ? new Tag(data) : null;
+    _comment_or_character = (type == Type.Character || type == Type.Comment) ? new Data(data) : null;
+  }
+
   readonly Type _type;
   readonly DocType? _doctype;
   readonly Tag? _tag;
@@ -37,6 +44,15 @@ class HTMLToken {
     }
   }
 
+  public bool is_null_character {
+    get {
+      if (_type == Type.Character) {
+        return _comment_or_character!.first_character == 0x0000;
+      }
+      return false;
+    }
+  }
+
   public bool is_comment { get { return _type == Type.Comment; } }
   public bool is_doctype { get { return _type == Type.DOCTYPE; } }
 
@@ -50,6 +66,10 @@ class HTMLToken {
   }
 
   public class DocType {
+    public DocType() {}
+    public DocType(string name) {
+      _name.Append(name);
+    }
     StringBuilder _name = new StringBuilder();
     StringBuilder? _public_identifier;
     StringBuilder? _system_identifier;
@@ -80,6 +100,10 @@ class HTMLToken {
   }
 
   public class Tag {
+    public Tag() {}
+    public Tag(string name) {
+      _name.Append(name);
+    }
     StringBuilder _name = new StringBuilder();
     public string name { get { return _name.ToString(); } }
     public bool self_closing;
@@ -125,6 +149,10 @@ class HTMLToken {
   }
 
   public class Data {
+    public Data() {}
+    public Data(string data) {
+      _data.Append(data);
+    }
     readonly StringBuilder _data = new StringBuilder();
     public string data { get { return _data.ToString(); } }
     public override string ToString() {
@@ -145,6 +173,9 @@ class HTMLToken {
   public DocType doctype { get { return _doctype!; } }
   public Data comment_or_character { get { return _comment_or_character!; } }
 
+  public bool is_self_closing { get { return _tag!.self_closing; } }
+  public bool is_character { get { return _type == Type.Character; } }
+
   public override string ToString() {
     return _type switch {
       Type.DOCTYPE => $"DOCTYPE {_doctype}",
@@ -163,8 +194,8 @@ class HTMLToken {
     return token;
   }
 
-  public bool is_eof() {
-    return _type == Type.EndOfFile;
+  public bool is_eof {
+    get { return _type == Type.EndOfFile; }
   }
 
   public string? get_attribute_value(string name) {

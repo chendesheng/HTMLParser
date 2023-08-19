@@ -14,6 +14,7 @@ class HTMLParser {
     Console.WriteLine(message);
   }
 
+  private bool _frameset_ok = false;
   InsertionMode _insertion_mode = InsertionMode.Initial;
   Document _document = new();
   // Initially, the stack of open elements is empty. The stack grows downwards;
@@ -23,7 +24,16 @@ class HTMLParser {
   Stack<Element> _open_elements = new();
   Element? _head_element = null;
   Element? _form_element = null;
+  InsertionMode _original_insertion_mode;
+  int _script_nesting_level = 0;
+  bool _parser_pause_flag = false;
+  private HTMLParser? _active_speculative_html_parser = null;
 
+  Node current_node { get { return _open_elements.Peek(); } }
+  void pop_current_node() {
+    _open_elements.Pop();
+  }
+  
 
   enum InsertionMode {
     Initial,
@@ -63,7 +73,7 @@ class HTMLParser {
     // 1. If there was an override target specified, then let target be the override target.
     //    Otherwise, let target be the current node.
     // FIXME: handle override target
-    var target = _open_elements.Peek();
+    var target = current_node;
     // 2. Determine the adjusted insertion location using the first matching steps from the following list:
     // If foster parenting is enabled and target is a table, tbody, tfoot, thead, or tr element
     // FIXME
@@ -292,21 +302,441 @@ class HTMLParser {
     // Reprocess the current token.
     reprocess_token();
   }
-  void run_in_head_mode() {
-    throw new NotImplementedException();
+
+  // https://html.spec.whatwg.org/#parsing-elements-that-contain-only-text
+  void parse_element_contain_only_text(HTMLToken token, bool is_raw_text) {
+    Console.WriteLine($"parse_element_contain_only_text: token={token}, is_raw_text={is_raw_text}");
+    // The generic raw text element parsing algorithm and the generic RCDATA element parsing algorithm consist of the following steps. These algorithms are always invoked in response to a start tag token.
+
+    // 1. Insert an HTML element for the token.
+    insert_a_foreign_element(token, Namespaces.HTML);
+
+    // 2. If the algorithm that was invoked is the generic raw text element parsing algorithm, switch the tokenizer to the RAWTEXT state; otherwise the algorithm invoked was the generic RCDATA element parsing algorithm, switch the tokenizer to the RCDATA state.
+    if (is_raw_text) {
+      _tokenizer.switch_to_raw_text_state();
+    } else {
+      _tokenizer.switch_to_rcdata_state();
+    }
+
+    // 3. Let the original insertion mode be the current insertion mode.
+    _original_insertion_mode = _insertion_mode;
+
+    // 4. Then, switch the insertion mode to "text".
+    _insertion_mode = InsertionMode.Text;
+    Console.WriteLine("switch to text mode");
   }
+
+  // https://html.spec.whatwg.org/#parsing-main-inhead
+  void run_in_head_mode() {
+    Console.WriteLine($"run_in_head_mode() {_next_token}");
+    if (_next_token.is_space_character) {
+      insert_a_character(_next_token.comment_or_character.data);
+      return;
+    }
+    if (_next_token.is_comment) {
+      insert_a_comment(_next_token);
+      return;
+    }
+    if (_next_token.is_doctype) {
+      on_error("parse error");
+      return;
+    }
+
+    if (_next_token.is_start_tag_of("html")) {
+      // Process the token using the rules for the "in body" insertion mode.
+      run_in_body_mode();
+    }
+
+    // A start tag whose tag name is one of: "base", "basefont", "bgsound", "link"
+    if (_next_token.is_start_tag_of("base", "basefont", "bgsound", "link")) {
+      // Insert an HTML element for the token. Immediately pop the current node off the stack of open elements.
+      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      pop_current_node();
+      // Acknowledge the token's self-closing flag, if it is set.
+      if (_next_token.is_self_closing) {
+        acknowledge_self_closing_flag();
+      }
+      return;
+    }
+    // A start tag whose tag name is "meta"
+    if (_next_token.is_start_tag_of("meta")) {
+      // Insert an HTML element for the token. Immediately pop the current node off the stack of open elements.
+      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      pop_current_node();
+      // Acknowledge the token's self-closing flag, if it is set.
+      if (_next_token.is_self_closing) {
+        acknowledge_self_closing_flag();
+      }
+
+      // FIXME:
+      // If the active speculative HTML parser is null, then:
+
+          // 1. If the element has a charset attribute, and getting an encoding from its value results in an encoding, and the confidence is currently tentative, then change the encoding to the resulting encoding.
+
+          // 2. Otherwise, if the element has an http-equiv attribute whose value is an ASCII case-insensitive match for the string "Content-Type", and the element has a content attribute, and applying the algorithm for extracting a character encoding from a meta element to that attribute's value returns an encoding, and the confidence is currently tentative, then change the encoding to the extracted encoding.
+      return;
+    }
+
+    // A start tag whose tag name is "title"
+    if (_next_token.is_start_tag_of("title")) {
+      // Follow the generic RCDATA element parsing algorithm.
+      // https://html.spec.whatwg.org/#generic-rcdata-element-parsing-algorithm
+      parse_element_contain_only_text(_next_token, is_raw_text:false);
+      return;
+    }
+
+    // A start tag whose tag name is "noscript", if the scripting flag is enabled
+    // A start tag whose tag name is one of: "noframes", "style"
+    if (_next_token.is_start_tag_of("noscript", "noframes", "style")) {
+      // Follow the generic raw text element parsing algorithm.
+      // https://html.spec.whatwg.org/#generic-raw-text-element-parsing-algorithm
+      parse_element_contain_only_text(_next_token, is_raw_text:true);
+      return;
+    }
+
+    // A start tag whose tag name is "noscript", if the scripting flag is disabled
+    if (_next_token.is_start_tag_of("noscript")) {
+      // Insert an HTML element for the token.
+      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      // Switch the insertion mode to "in head noscript".
+      _insertion_mode = InsertionMode.InHeadNoscript;
+      return;
+    }
+
+    // A start tag whose tag name is "script"
+    if (_next_token.is_start_tag_of("script")) {
+      // 1. Let the adjusted insertion location be the appropriate place for inserting a node.
+      var adjusted_insertion_location = appropriate_place_for_inserting_a_node();;
+      // 2. Create an element for the token in the HTML namespace, with the intended parent being the element in which the adjusted insertion location finds itself.
+      var element = create_element_for_token(_next_token, adjusted_insertion_location, Namespaces.HTML);
+
+      // 3. Set the element's parser document to the Document, and set the element's force async to false.
+      // TODO
+
+      // 4. If the parser was created as part of the HTML fragment parsing algorithm, then set the script element's already started to true. (fragment case)
+      // TODO
+
+      // 5. If the parser was invoked via the document.write() or document.writeln() methods, then optionally set the script element's already started to true. (For example, the user agent might use this clause to prevent execution of cross-origin scripts inserted via document.write() under slow network conditions, or when the page has already taken a long time to load.)
+      // TODO
+
+      // 6. Insert the newly created element at the adjusted insertion location.
+      adjusted_insertion_location.append_child(element);
+
+      // 7. Push the element onto the stack of open elements so that it is the new current node.
+      _open_elements.Push(element);
+
+      // 8. Switch the tokenizer to the script data state.
+      _tokenizer.switch_to_script_data_state();
+
+      // 9. Let the original insertion mode be the current insertion mode.
+      _original_insertion_mode = _insertion_mode;
+
+      // 10. Switch the insertion mode to "text".
+      _insertion_mode = InsertionMode.Text;
+      return;
+    }
+
+    // An end tag whose tag name is "head"
+    if (_next_token.is_end_tag_of("head")) {
+      // Pop the current node (which will be the head element) off the stack of open elements.
+      pop_current_node();
+      // Switch the insertion mode to "after head".
+      _insertion_mode = InsertionMode.AfterHead;
+      return;
+    }
+
+    // An end tag whose tag name is one of: "body", "html", "br"
+    if (_next_token.is_end_tag_of("body", "html", "br")) {
+      // Act as described in the "anything else" entry below.
+    }
+
+    // A start tag whose tag name is "template"
+    if (_next_token.is_start_tag_of("template")) {
+      // Insert an HTML element for the token.
+      // Insert a marker at the end of the list of active formatting elements.
+      // Set the frameset-ok flag to "not ok".
+      // Switch the insertion mode to "in template".
+      // Push "in template" onto the stack of template insertion modes so that it is the new current template insertion mode.
+      throw new NotImplementedException();
+    }
+
+    // An end tag whose tag name is "template"
+    if (_next_token.is_end_tag_of("template")) {
+      throw new NotImplementedException();
+    }
+
+    // A start tag whose tag name is "head"
+    // Any other end tag
+    if (_next_token.is_start_tag_of("head") || _next_token.is_end_tag) {
+      // Parse error. Ignore the token.
+      on_error("parse error");
+      return;
+    }
+
+    // Anything else
+    // Pop the current node (which will be the head element) off the stack of open elements.
+    pop_current_node();
+    // Switch the insertion mode to "after head".
+    _insertion_mode = InsertionMode.AfterHead;
+    // Reprocess the token.
+    reprocess_token();
+  }
+
+  // https://html.spec.whatwg.org/#acknowledge-self-closing-flag
+  // When a start tag token is emitted with its self-closing flag set, if the flag is not acknowledged when it is processed by the tree construction stage, that is a non-void-html-element-start-tag-with-trailing-solidus parse error.
+  private void acknowledge_self_closing_flag() {
+    // FIXME: what is this?
+  }
+
+  // https://html.spec.whatwg.org/#insert-a-character
+  private void insert_a_character(string character) {
+    // 1. Let data be the characters passed to the algorithm, or, if no characters were explicitly specified, the character of the character token being processed.
+    var data = character;
+    // 2. Let the adjusted insertion location be the appropriate place for inserting a node.
+    var adjusted_insertion_location = appropriate_place_for_inserting_a_node();
+    // 3. If the adjusted insertion location is in a Document node, then return.
+    if (adjusted_insertion_location is Document) return;
+    // 4. If there is a Text node immediately before the adjusted insertion location, then append data to that Text node's data.
+    if (adjusted_insertion_location.previous_sibling is Text text) {
+      text.append_data(data);
+      return;
+    }
+  }
+
   void run_in_head_noscript_mode() {
     throw new NotImplementedException();
   }
+
+  // https://html.spec.whatwg.org/#the-after-head-insertion-mode
   void run_after_head_mode() {
-    throw new NotImplementedException();
+    if (_next_token.is_space_character) {
+      insert_a_character(_next_token.comment_or_character.data);
+      return;
+    }
+    if (_next_token.is_comment) {
+      insert_a_comment(_next_token);
+      return;
+    }
+    if (_next_token.is_doctype) {
+      on_error("parse error");
+      return;
+    }
+    if (_next_token.is_start_tag_of("html")) {
+      run_in_body_mode();
+      return;
+    }
+    if (_next_token.is_start_tag_of("body")) {
+      // Insert an HTML element for the token.
+      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      // Set the frameset-ok flag to "not ok".
+      _frameset_ok = false;
+      // Switch the insertion mode to "in body".
+      _insertion_mode = InsertionMode.InBody;
+      return;
+    }
+    if (_next_token.is_start_tag_of("frameset")) {
+      // Insert an HTML element for the token.
+      insert_a_foreign_element(_next_token, Namespaces.HTML);
+      // Switch the insertion mode to "in frameset".
+      _insertion_mode = InsertionMode.InFrameset;
+      return;
+    }
+    if (_next_token.is_start_tag_of("base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title")) {
+      throw new NotImplementedException();
+    }
+    if (_next_token.is_end_tag_of("template")) {
+      throw new NotImplementedException();
+    }
+    if (_next_token.is_end_tag_of("body", "html", "br")) {
+      // Act as described in the "anything else" entry below.
+    }
+    if (_next_token.is_start_tag_of("head") || _next_token.is_end_tag) {
+      // Parse error. Ignore the token.
+      on_error("parse error");
+      return;
+    }
+
+    // Insert an HTML element for a "body" start tag token with no attributes.
+    insert_a_foreign_element(new HTMLToken(HTMLToken.Type.StartTag, "body"), Namespaces.HTML);
+    // Switch the insertion mode to "in body".
+    _insertion_mode = InsertionMode.InBody;
+    // Reprocess the current token.
+    reprocess_token();
   }
   void run_in_body_mode() {
+    if (_next_token.is_null_character) {
+      // Parse error. Ignore the token.
+      on_error("parse error");
+      return;
+    }
+    if (_next_token.is_space_character) {
+      // Reconstruct the active formatting elements, if any.
+      reconstruct_active_formatting_elements();
+
+      // Insert the token's character.
+      insert_a_character(_next_token.comment_or_character.data);
+      return;
+    }
+
+    if (_next_token.is_character) {
+      // Reconstruct the active formatting elements, if any.
+      reconstruct_active_formatting_elements();
+
+      // Insert the token's character.
+      insert_a_character(_next_token.comment_or_character.data);
+
+      // Set the frameset-ok flag to "not ok".
+      _frameset_ok = false;
+      return;
+    }
+
+    if (_next_token.is_comment) {
+      // Insert a comment.
+      insert_a_comment(_next_token);
+      return;
+    }
+
+    if (_next_token.is_doctype) {
+      // Parse error. Ignore the token.
+      on_error("parse error");
+      return;
+    }
+
+    if (_next_token.is_start_tag_of("html")) {
+      // Parse error. Ignore the token.
+      on_error("parse error");
+      return;
+    }
+
+    // A start tag whose tag name is one of: "base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title"
+    // An end tag whose tag name is "template"
+    if (_next_token.is_start_tag_of("base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title") || _next_token.is_end_tag_of("template")) {
+      // Process the token using the rules for the "in head" insertion mode.
+      run_in_head_mode();
+      return;
+    }
+
+    if (_next_token.is_start_tag_of("body")) {
+      throw new NotImplementedException();
+    }
+
+    if (_next_token.is_start_tag_of("frameset")) {
+      throw new NotImplementedException();
+    }
+
+    if (_next_token.is_eof) {
+      // If the stack of template insertion modes is not empty, then process the token using the rules for the "in template" insertion mode.
+      // Otherwise, follow these steps:
+      // 1. If there is a node in the stack of open elements that is not either a dd element, a dt element, an li element, an optgroup element, an option element, a p element, an rb element, an rp element, an rt element, an rtc element, a tbody element, a td element, a tfoot element, a th element, a thead element, a tr element, the body element, or the html element, then this is a parse error.
+      // 2. Stop parsing.
+      stop_parsing();
+      return;
+    }
+  }
+
+  // https://html.spec.whatwg.org/#stop-parsing
+  private void stop_parsing() {
     throw new NotImplementedException();
   }
+
+  private void reconstruct_active_formatting_elements() {
+    throw new NotImplementedException();
+  }
+
   void run_text_mode() {
-    throw new NotImplementedException();
+    if (_next_token.is_character) {
+      // Insert the token's character.
+      insert_a_character(_next_token.comment_or_character.data);
+      return;
+    }
+    if (_next_token.is_eof) {
+      // Parse error. Switch the insertion mode to the original insertion mode and reprocess the token.
+      on_error("parse error");
+      throw new NotImplementedException();
+    }
+
+    if (_next_token.is_end_tag_of("script")) {
+      // If the active speculative HTML parser is null and the JavaScript execution context stack is empty, then perform a microtask checkpoint.
+      // TODO
+
+      // Let script be the current node (which will be a script element).
+      var script = current_node;
+      // Pop the current node off the stack of open elements.
+      pop_current_node();
+      // Switch the insertion mode to the original insertion mode.
+      _insertion_mode = _original_insertion_mode;
+
+      // Let the old insertion point have the same value as the current insertion point. Let the insertion point be just before the next input character.
+      // TODO: document.write
+
+      // Increment the parser's script nesting level by one.
+      _script_nesting_level++;
+
+      // If the active speculative HTML parser is null, then prepare the script element script. This might cause some script to execute, which might cause new characters to be inserted into the tokenizer, and might cause the tokenizer to output more tokens, resulting in a reentrant invocation of the parser.
+      if (_active_speculative_html_parser == null) {
+        Debug.Assert(script is HTMLScriptElement);
+        prepare_script_element((HTMLScriptElement)script);
+      }
+      // TODO
+
+      // Decrement the parser's script nesting level by one. If the parser's script nesting level is zero, then set the parser pause flag to false.
+      _script_nesting_level--;
+      if (_script_nesting_level == 0) {
+        _parser_pause_flag = false;
+      }
+
+      // Let the insertion point have the value of the old insertion point. (In other words, restore the insertion point to its previous value. This value might be the "undefined" value.)
+      // At this stage, if the pending parsing-blocking script is not null, then:
+      //    If the script nesting level is not zero:
+      //    Otherwise
+      return;
+    }
+
+    if (_next_token.is_end_tag) {
+      pop_current_node();
+      _insertion_mode = _original_insertion_mode;
+      return;
+    }
   }
+
+  // https://html.spec.whatwg.org/#prepare-the-script-element
+  private void prepare_script_element(HTMLScriptElement el) {
+    // 1. If el's already started is true, then return.
+    if (el.already_started) {
+      return;
+    }
+    // 2. Let parser document be el's parser document.
+    var parser_document = el.parser_document; 
+    // 3. Set el's parser document to null.
+    el.parser_document = null;
+    // 4. If parser document is non-null and el does not have an async attribute, then set el's force async to true.
+    if (parser_document != null && !el.has_attribute("async")) {
+      el.force_async = true;
+    }
+    // 5. Let source text be el's child text content.
+    var source_text = el.child_text_content();
+    // 6. If el has no src attribute, and source text is the empty string, then return.
+    if (!el.has_attribute("src") && source_text == "") {
+      return;
+    }
+    // 7. If el is not connected, then return.
+    if (!el.is_connected) return;
+
+    // 8. If any of the following are true:
+    //      el has a type attribute whose value is the empty string;
+    //      el has no type attribute but it has a language attribute and that attribute's value is the empty string; or
+    //      el has neither a type attribute nor a language attribute
+    // then let the script block's type string for this script element be "text/javascript".
+    // Otherwise, if el has a type attribute, then let the script block's type string be the value of that attribute with leading and trailing ASCII whitespace stripped.
+    if (el.has_attribute("type") && el.get_attribute("type") == ""
+    || !el.has_attribute("type") && el.has_attribute("language") && el.get_attribute("language") == ""
+    || !el.has_attribute("type") && !el.has_attribute("language")) {
+      el.type = "text/javascript";
+    } else if (el.has_attribute("type")) {
+      el.type = el.get_attribute("type").Trim();
+    }
+  }
+
   void run_in_table_mode() {
     throw new NotImplementedException();
   }
@@ -360,7 +790,7 @@ class HTMLParser {
         _reprocess_token = false;
       } else _next_token = _tokenizer.next_token();
 
-      if (_next_token.is_eof()) return _document;
+      if (_next_token.is_eof) return _document;
 
       Console.WriteLine($"insertion_mode: {_insertion_mode}; next_token: {_next_token}");
 

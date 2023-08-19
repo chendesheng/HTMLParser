@@ -1713,6 +1713,14 @@ class HTMLTokenizer {
     _state = State.ScriptData;
   }
 
+  public void switch_to_raw_text_state() {
+    _state = State.RAWTEXT;
+  }
+
+  public void switch_to_rcdata_state() {
+    _state = State.RCDATA;
+  }
+
   bool next_few_characters_are(string str) {
     for (var i = 0; i < str.Length; i++) {
       var c = peek_codepoint(i);

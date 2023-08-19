@@ -71,6 +71,18 @@ class Node : EventTarget {
   public string? node_value { get { return null; } }
   public string? text_content { get { return null; } }
 
+  public string child_text_content() {
+    var sb = new StringBuilder();
+    foreach (var child in _children) {
+      if (child is Text text) {
+        sb.Append(text.data);
+      } else {
+        sb.Append(child.child_text_content());
+      }
+    }
+    return sb.ToString();
+  }
+
   public bool dispatch_event(Event e) {
     return false;
   }
@@ -390,7 +402,7 @@ class Node : EventTarget {
   // https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity
   private static void ensure_pre_insert_validity(Node node, Node parent, Node? child) {
     // 1. If parent is not a Document, DocumentFragment, or Element node, then throw a "HierarchyRequestError" DOMException.
-    if (parent is not Document) {
+    if (parent is not Document && parent is not DocumentFragment && parent is not Element) {
       throw new HierarchyRequestError();
     }
 

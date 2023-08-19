@@ -58,6 +58,8 @@ class Document : Node {
         //      and node document set to document.
         if (local_name == "html") {
           result = new HTMLHtmlElement(document);
+        } else if (local_name == "head") {
+          result = new HTMLHeadElement(document);
         } else {
           result = new HTMLElement(document, Namespaces.HTML, local_name);
         }
