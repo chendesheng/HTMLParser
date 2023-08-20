@@ -11,7 +11,9 @@ class HTMLParser {
   }
 
   void on_error(string message) {
+    Console.ForegroundColor = ConsoleColor.Red;
     Console.WriteLine(message);
+    Console.ResetColor();
   }
 
   private bool _frameset_ok = false;
@@ -29,6 +31,9 @@ class HTMLParser {
   bool _parser_pause_flag = false;
   private HTMLParser? _active_speculative_html_parser = null;
   private bool _forster_parenting_enabled = false;
+
+   // FIXME: replace object type with ElementOrMarker??
+  private List<object> _active_formatting_elements = new();
 
   Node current_node { get { return _open_elements.Peek(); } }
   void pop_current_node() {
@@ -523,6 +528,7 @@ class HTMLParser {
     //    Otherwise, create a new Text node whose data is data and whose node document is the same as that of the element in which the adjusted insertion location finds itself, and insert the newly created node at the adjusted insertion location.
     if (adjusted_insertion_location.last_child is Text txt) {
       txt.append_data(data);
+      Console.WriteLine($"appended data to text node: {txt.data}");
       return;
     } 
     var text = new Text(adjusted_insertion_location.node_document, data);
@@ -665,8 +671,36 @@ class HTMLParser {
     throw new NotImplementedException();
   }
 
+  // https://html.spec.whatwg.org/#reconstruct-the-active-formatting-elements
   private void reconstruct_active_formatting_elements() {
-    throw new NotImplementedException();
+    // When the steps below require the UA to reconstruct the active formatting elements, the UA must perform the following steps:
+
+    // 1. If there are no entries in the list of active formatting elements, then there is nothing to reconstruct; stop this algorithm.
+    if (_active_formatting_elements.Count == 0) {
+      return;
+    }
+
+    // 2. If the last (most recently added) entry in the list of active formatting elements is a marker, or if it is an element that is in the stack of open elements, then there is nothing to reconstruct; stop this algorithm.
+
+    // 3. Let entry be the last (most recently added) element in the list of active formatting elements.
+
+    // 4. Rewind: If there are no entries before entry in the list of active formatting elements, then jump to the step labeled create.
+
+    // 5. Let entry be the entry one earlier than entry in the list of active formatting elements.
+
+    // 6. If entry is neither a marker nor an element that is also in the stack of open elements, go to the step labeled rewind.
+
+    // 7. Advance: Let entry be the element one later than entry in the list of active formatting elements.
+
+    // 8. Create: Insert an HTML element for the token for which the element entry was created, to obtain new element.
+
+    // 9. Replace the entry for entry in the list with an entry for new element.
+
+    // 10. If the entry for new element in the list of active formatting elements is not the last entry in the list, return to the step labeled advance.
+
+    // This has the effect of reopening all the formatting elements that were opened in the current body, cell, or caption (whichever is youngest) that haven't been explicitly closed.
+
+
   }
 
   void run_text_mode(HTMLToken token) {
@@ -719,6 +753,7 @@ class HTMLParser {
     }
 
     if (token.is_end_tag) {
+      Console.WriteLine($"End tag: {token.tag!.name}");
       pop_current_node();
       _insertion_mode = _original_insertion_mode;
       return;
@@ -818,7 +853,9 @@ class HTMLParser {
 
       if (_next_token.is_eof) return _document;
 
+      Console.ForegroundColor = ConsoleColor.Green;
       Console.WriteLine($"insertion_mode: {_insertion_mode}; next_token: {_next_token}");
+      Console.ResetColor();
 
       switch (_insertion_mode) {
         case InsertionMode.Initial:

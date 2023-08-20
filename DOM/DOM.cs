@@ -27,8 +27,10 @@ class IndexSizeError : DOMException {}
 
 // https://dom.spec.whatwg.org/#interface-characterdata
 class CharacterData : Node {
-  public CharacterData(Document document) : base(document) {}
-  string _data = "";
+  public CharacterData(Document document, string data = "") : base(document) {
+    _data = data;
+  }
+  string _data;
 
   // The data getter steps are to return this’s data. Its setter must replace data with node this, offset 0, count this’s length, and data new value.
   public string data {
@@ -103,6 +105,10 @@ class CharacterData : Node {
     // 12. If node’s parent is non-null, then run the children changed steps for node’s parent.
     // FIXME: children changed steps
   }
+
+  public override string ToString() {
+    return $"[{_data}]";
+  }
 }
 
 // https://dom.spec.whatwg.org/#interface-comment 
@@ -113,14 +119,6 @@ class Comment : CharacterData {
 // https://dom.spec.whatwg.org/#interface-processinginstruction
 class ProcessingInstruction : CharacterData {
   public ProcessingInstruction(Document document) : base(document) {}
-}
-
-class Text : CharacterData {
-  public Text(Document document, string data = "") : base(document) { }
-  public Text split_text(ulong offset) {
-    return new Text(node_document);
-  }
-  public string whole_text { get { return ""; } }
 }
 
 interface HTMLOrSVGElement {

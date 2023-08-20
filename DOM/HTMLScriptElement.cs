@@ -1,7 +1,7 @@
 using System.Xml.XPath;
 
 class HTMLScriptElement : HTMLElement {
-  public HTMLScriptElement(Document document, string? ns) : base(document, ns, "script") {
+  public HTMLScriptElement(Document document, string? ns = Namespaces.HTML) : base(document, ns, "script") {
   }
   public bool already_started { get; set; } = false;
   public string? type { get; set; } = "";

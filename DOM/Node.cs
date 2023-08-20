@@ -83,6 +83,33 @@ class Node : EventTarget {
     return sb.ToString();
   }
 
+  // https://dom.spec.whatwg.org/#string-replace-all
+  public void string_replace_all(string str) {
+    // 1. Let node be null.
+    var node = (Node?)null;
+    if (str != "") {
+      node = new Text(node_document, str);
+    }
+    replace_all(node);
+  }
+
+  // https://dom.spec.whatwg.org/#concept-node-replace-all
+  private void replace_all(Node? node) {
+    // FIXME: implement mutation record
+
+    remove_all_children_in_tree_order();
+    if (node != null) {
+      append_child(node);
+    }
+  }
+
+  private void remove_all_children_in_tree_order() {
+    while(first_child != null) {
+      first_child.remove_all_children_in_tree_order();
+      remove_child(first_child);
+    }
+  }
+
   public bool dispatch_event(Event e) {
     return false;
   }
@@ -515,7 +542,6 @@ class Node : EventTarget {
     for (var i = 0; i < indent * 2; ++i) sb.Append(' '); 
     sb.AppendLine($"[{display_name}]");
     if (has_child_nodes) {
-      Console.WriteLine($"to_string: {_children}");
       foreach(var child in _children) {
         sb.Append(child.to_string(indent + 1));
       }

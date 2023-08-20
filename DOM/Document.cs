@@ -60,6 +60,12 @@ class Document : Node {
           result = new HTMLHtmlElement(document);
         } else if (local_name == "head") {
           result = new HTMLHeadElement(document);
+        } else if (local_name == "script") {
+          result = new HTMLScriptElement(document);
+        } else if (local_name == "body") {
+          result = new HTMLBodyElement(document);
+        } else if (local_name == "title") {
+          result = new HTMLTitleElement(document);
         } else {
           result = new HTMLElement(document, Namespaces.HTML, local_name);
         }

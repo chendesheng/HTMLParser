@@ -15,6 +15,10 @@ class HTMLTokenizer {
         return token;
       }
 
+      // Console.ForegroundColor = ConsoleColor.Red;
+      // Console.WriteLine($"next_token: {_state}");
+      // Console.ResetColor();
+
       switch (_state) {
         case State.Data:
           consume_next_input_character();
@@ -174,6 +178,7 @@ class HTMLTokenizer {
           }
           break;
         case State.RCDATAEndTagName:
+          consume_next_input_character();
           if (is_white_space(_current_input_character)) {
             if (is_appropriate_end_tag_token(_current_token)) {
               switch_to(State.BeforeAttributeName);
@@ -199,6 +204,7 @@ class HTMLTokenizer {
           } else if (is_ascii_upper_alpha(_current_input_character)) {
             Debug.Assert(_current_token?.tag != null);
             _current_token.tag.append_to_name(to_lower(current_input_character));
+            append_to_temp_buffer(current_input_character);
             continue;
           } else if (is_ascii_lower_alpha(_current_input_character)) {
             Debug.Assert(_current_token?.tag != null);
