@@ -32,14 +32,14 @@ class HTMLParser {
   private HTMLParser? _active_speculative_html_parser = null;
   private bool _forster_parenting_enabled = false;
 
-   // FIXME: replace object type with ElementOrMarker??
+  // FIXME: replace object type with ElementOrMarker??
   private List<object> _active_formatting_elements = new();
 
   Node current_node { get { return _open_elements.Peek(); } }
   void pop_current_node() {
     _open_elements.Pop();
   }
-  
+
 
   enum InsertionMode {
     Initial,
@@ -83,7 +83,7 @@ class HTMLParser {
     var target = current_node;
     // 2. Determine the adjusted insertion location using the first matching steps from the following list:
     // If foster parenting is enabled and target is a table, tbody, tfoot, thead, or tr element
-    if (_forster_parenting_enabled && target.is_element_of("table", "tbody", "tfoot" ,"thead", "tr")) {
+    if (_forster_parenting_enabled && target.is_element_of("table", "tbody", "tfoot", "thead", "tr")) {
       // 1. Let last template be the last template element in the stack of open elements, if any.
       // TODO
 
@@ -269,7 +269,6 @@ class HTMLParser {
     // 9. Let element be the result of creating an element given document, localName, given namespace, null, and is.
     //    If will execute script is true, set the synchronous custom elements flag; otherwise, leave it unset.
     var element = Document.create_an_element(document, local_name, ns, null, es);
-    Console.WriteLine($"create_an_element({document}, {local_name}, {ns}) returns {element}");
 
     // 10. Append each attribute in the given token to element.
     if (token.tag!.attributes != null) element.append_attribute(token.tag!.attributes);
@@ -355,7 +354,6 @@ class HTMLParser {
 
   // https://html.spec.whatwg.org/#parsing-main-inhead
   void run_in_head_mode(HTMLToken token) {
-    Console.WriteLine($"run_in_head_mode(HTMLToken token) {token}");
     if (token.is_space_character) {
       insert_a_character(token.comment_or_character.data);
       return;
@@ -398,9 +396,9 @@ class HTMLParser {
       // FIXME:
       // If the active speculative HTML parser is null, then:
 
-          // 1. If the element has a charset attribute, and getting an encoding from its value results in an encoding, and the confidence is currently tentative, then change the encoding to the resulting encoding.
+      // 1. If the element has a charset attribute, and getting an encoding from its value results in an encoding, and the confidence is currently tentative, then change the encoding to the resulting encoding.
 
-          // 2. Otherwise, if the element has an http-equiv attribute whose value is an ASCII case-insensitive match for the string "Content-Type", and the element has a content attribute, and applying the algorithm for extracting a character encoding from a meta element to that attribute's value returns an encoding, and the confidence is currently tentative, then change the encoding to the extracted encoding.
+      // 2. Otherwise, if the element has an http-equiv attribute whose value is an ASCII case-insensitive match for the string "Content-Type", and the element has a content attribute, and applying the algorithm for extracting a character encoding from a meta element to that attribute's value returns an encoding, and the confidence is currently tentative, then change the encoding to the extracted encoding.
       return;
     }
 
@@ -408,7 +406,7 @@ class HTMLParser {
     if (token.is_start_tag_of("title")) {
       // Follow the generic RCDATA element parsing algorithm.
       // https://html.spec.whatwg.org/#generic-rcdata-element-parsing-algorithm
-      parse_element_contain_only_text(token, is_raw_text:false);
+      parse_element_contain_only_text(token, is_raw_text: false);
       return;
     }
 
@@ -417,7 +415,7 @@ class HTMLParser {
     if (token.is_start_tag_of("noscript", "noframes", "style")) {
       // Follow the generic raw text element parsing algorithm.
       // https://html.spec.whatwg.org/#generic-raw-text-element-parsing-algorithm
-      parse_element_contain_only_text(token, is_raw_text:true);
+      parse_element_contain_only_text(token, is_raw_text: true);
       return;
     }
 
@@ -433,7 +431,7 @@ class HTMLParser {
     // A start tag whose tag name is "script"
     if (token.is_start_tag_of("script")) {
       // 1. Let the adjusted insertion location be the appropriate place for inserting a node.
-      var adjusted_insertion_location = find_appropriate_place_for_inserting_a_node();;
+      var adjusted_insertion_location = find_appropriate_place_for_inserting_a_node(); ;
       // 2. Create an element for the token in the HTML namespace, with the intended parent being the element in which the adjusted insertion location finds itself.
       var element = create_element_for_token(token, adjusted_insertion_location, Namespaces.HTML);
 
@@ -528,9 +526,8 @@ class HTMLParser {
     //    Otherwise, create a new Text node whose data is data and whose node document is the same as that of the element in which the adjusted insertion location finds itself, and insert the newly created node at the adjusted insertion location.
     if (adjusted_insertion_location.last_child is Text txt) {
       txt.append_data(data);
-      Console.WriteLine($"appended data to text node: {txt.data}");
       return;
-    } 
+    }
     var text = new Text(adjusted_insertion_location.node_document, data);
     adjusted_insertion_location.append_child(text);
   }
@@ -635,8 +632,10 @@ class HTMLParser {
     }
 
     if (token.is_start_tag_of("html")) {
-      // Parse error. Ignore the token.
+      // Parse error.
       on_error("parse error");
+      // If there is a template element on the stack of open elements, then ignore the token.
+      // Otherwise, for each attribute on the token, check to see if the attribute is already present on the top element of the stack of open elements. If it is not, add the attribute and its corresponding value to that element.
       return;
     }
 
@@ -649,6 +648,12 @@ class HTMLParser {
     }
 
     if (token.is_start_tag_of("body")) {
+      // Parse error.
+      on_error("parse error");
+
+      // If the second element on the stack of open elements is not a body element, if the stack of open elements has only one node on it, or if there is a template element on the stack of open elements, then ignore the token. (fragment case)
+
+      // Otherwise, set the frameset-ok flag to "not ok"; then, for each attribute on the token, check to see if the attribute is already present on the body element (the second element) on the stack of open elements, and if it is not, add the attribute and its corresponding value to that element.
       throw new NotImplementedException();
     }
 
@@ -663,6 +668,229 @@ class HTMLParser {
       // 2. Stop parsing.
       stop_parsing();
       return;
+    }
+
+    // An end tag whose tag name is "body"
+    if (token.is_end_tag_of("body")) {
+      // If the stack of open elements does not have a body element in scope, this is a parse error; ignore the token.
+      if (!_open_elements.Any(ele => ele.tag_name == "body")) {
+        on_error("parse error");
+        return;
+      }
+
+      // Otherwise, if there is a node in the stack of open elements that is not either a dd element, a dt element, an li element, an optgroup element, an option element, a p element, an rb element, an rp element, an rt element, an rtc element, a tbody element, a td element, a tfoot element, a th element, a thead element, a tr element, the body element, or the html element, then this is a parse error.
+      if (_open_elements.Any(ele => !(new[] { "dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc", "tbody", "td", "tfoot", "th", "thead", "tr", "body", "html" }).Contains(ele.tag_name))) {
+        on_error("parse error");
+        return;
+      }
+
+      // Switch the insertion mode to "after body".
+      _insertion_mode = InsertionMode.AfterBody;
+    }
+
+    if (token.is_end_tag_of("html")) {
+      // If the stack of open elements does not have a body element in scope, this is a parse error; ignore the token.
+      if (!_open_elements.Any(ele => ele.tag_name == "body")) {
+        on_error("parse error");
+        return;
+      }
+
+      // Otherwise, if there is a node in the stack of open elements that is not either a dd element, a dt element, an li element, an optgroup element, an option element, a p element, an rb element, an rp element, an rt element, an rtc element, a tbody element, a td element, a tfoot element, a th element, a thead element, a tr element, the body element, or the html element, then this is a parse error.
+      if (_open_elements.Any(ele => !(new[] { "dd", "dt", "li", "optgroup", "option", "p", "rb", "rp", "rt", "rtc", "tbody", "td", "tfoot", "th", "thead", "tr", "body", "html" }).Contains(ele.tag_name))) {
+        on_error("parse error");
+        return;
+      }
+
+      // Switch the insertion mode to "after body".
+      _insertion_mode = InsertionMode.AfterBody;
+
+      // Reprocess the token.
+      reprocess_token();
+      return;
+    }
+
+    // A start tag whose tag name is one of: "address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "main", "menu", "nav", "ol", "p", "search", "section", "summary", "ul"
+    if (token.is_start_tag_of("address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "main", "menu", "nav", "ol", "p", "search", "section", "summary", "ul")) {
+      // If the stack of open elements has a p element in button scope, then close a p element.
+      if (_open_elements.Any(ele => ele.tag_name == "p")) {
+        close_a_p_element();
+        insert_a_foreign_element(token, Namespaces.HTML);
+        return;
+      }
+    }
+
+    // A start tag whose tag name is one of: "h1", "h2", "h3", "h4", "h5", "h6"
+    if (token.is_start_tag_of("h1", "h2", "h3", "h4", "h5", "h6")) {
+      // If the stack of open elements has a p element in button scope, then close a p element.
+      // If the current node is an HTML element whose tag name is one of "h1", "h2", "h3", "h4", "h5", or "h6", then this is a parse error; pop the current node off the stack of open elements.
+      // Insert an HTML element for the token.
+      throw new NotImplementedException();
+    }
+
+    // A start tag whose tag name is one of: "pre", "listing"
+    if (token.is_start_tag_of("pre", "listing")) {
+      // If the stack of open elements has a p element in button scope, then close a p element.
+      // Insert an HTML element for the token.
+      // If the next token is a U+000A LINE FEED (LF) character token, then ignore that token and move on to the next one. (Newlines at the start of pre blocks are ignored as an authoring convenience.)
+      // Set the frameset-ok flag to "not ok".
+      throw new NotImplementedException();
+    }
+
+    // A start tag whose tag name is "form"
+    if (token.is_start_tag_of("form")) {
+      // If the form element pointer is not null, and there is no template element on the stack of open elements, then this is a parse error; ignore the token.
+      // Otherwise:
+      // If the stack of open elements has a p element in button scope, then close a p element.
+      // Insert an HTML element for the token, and, if there is no template element on the stack of open elements, set the form element pointer to point to the element created.
+      throw new NotImplementedException();
+    }
+
+    // A start tag whose tag name is "li"
+    if (token.is_start_tag_of("li")) {
+      // 1. Set the frameset-ok flag to "not ok".
+      _frameset_ok = false;
+      // 2. Initialize node to be the current node (the bottommost node of the stack).
+      var node = current_node;
+      // 3. Loop: If node is an li element, then run these substeps:
+      while (node is HTMLElement ele && ele.tag_name == "li") {
+        // 3.1. Generate implied end tags, except for li elements.
+        generate_implied_end_tags(except_for: "li");
+        // 3.2. If the current node is not an li element, then this is a parse error.
+        if (current_node is not HTMLElement el || el.tag_name != "li") {
+          on_error("parse error");
+        }
+        // 3.3. Pop elements from the stack of open elements until an li element has been popped from the stack.
+        pop_element_until("li");
+        // 3.4. Jump to the step labeled done below.
+      }
+      // 4. If node is in the special category, but is not an address, div, or p element, then jump to the step labeled done below.
+      // 5. Otherwise, set node to the previous entry in the stack of open elements and return to the step labeled loop.
+      // 6. Done: If the stack of open elements has a p element in button scope, then close a p element.
+      if (has_element_in_button_scope("p")) {
+        close_a_p_element();
+      }
+      // 7. Finally, insert an HTML element for the token.
+      insert_a_foreign_element(token, Namespaces.HTML);
+      return;
+    }
+
+    // A start tag whose tag name is one of: "dd", "dt"
+    if (token.is_start_tag_of("dd", "dt")) {
+      throw new NotImplementedException();
+    }
+
+    // A start tag whose tag name is "plaintext"
+    if (token.is_start_tag_of("plaintext")) {
+      throw new NotImplementedException();
+    }
+    // A start tag whose tag name is "button"
+    if (token.is_start_tag_of("button")) {
+      // 1. If the stack of open elements has a button element in scope, then run these substeps:
+      if (has_element_in_scope("button")) {
+        on_error("parse error");
+        generate_implied_end_tags();
+        pop_element_until("button");
+      }
+      reconstruct_active_formatting_elements();
+      insert_a_foreign_element(token, Namespaces.HTML);
+      _frameset_ok = false;
+      return;
+    }
+
+    // An end tag whose tag name is one of: "address", "article", "aside", "blockquote", "button", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "listing", "main", "menu", "nav", "ol", "pre", "search", "section", "summary", "ul"
+    if (token.is_end_tag_of("address", "article", "aside", "blockquote", "button", "center", "details", "dialog", "dir", "div", "dl", "fieldset", "figcaption", "figure", "footer", "header", "hgroup", "listing", "main", "menu", "nav", "ol", "pre", "search", "section", "summary", "ul")) {
+      if (!has_element_in_scope(token.tag!.name)) {
+        on_error("parse error");
+        return;
+      }
+
+      // Otherwise, run these steps:
+      // 1. Generate implied end tags.
+      generate_implied_end_tags();
+      // 2. If the current node is not an HTML element with the same tag name as that of the token, then this is a parse error.
+      if (current_node is not HTMLElement el || el.tag_name != token.tag!.name) {
+        on_error("parse error");
+      }
+      // 3. Pop elements from the stack of open elements until an HTML element with the same tag name as the token has been popped from the stack.
+      pop_element_until(token.tag!.name);
+      return;
+    }
+
+    // An end tag whose tag name is "form"
+    if (token.is_end_tag_of("form")) {
+      throw new NotImplementedException();
+    }
+
+    if (token.is_end_tag_of("p")) {
+      throw new NotImplementedException();
+    }
+
+    if (token.is_end_tag_of("li")) {
+      // If the stack of open elements does not have an li element in list item scope, then this is a parse error; ignore the token.
+      // Otherwise, run these steps:
+      // 1. Generate implied end tags, except for li elements.
+      generate_implied_end_tags(except_for: "li");
+      // 2. If the current node is not an li element, then this is a parse error.
+      if (current_node is not HTMLElement el || el.tag_name != "li") {
+        on_error("parse error");
+      }
+      pop_element_until("li");
+      return;
+    }
+
+    // Any other start tag
+    if (token.is_start_tag) {
+      // Reconstruct the active formatting elements, if any.
+      reconstruct_active_formatting_elements();
+
+      // Insert an HTML element for the token.
+      insert_a_foreign_element(token, Namespaces.HTML);
+      return;
+    }
+
+    throw new NotImplementedException();
+  }
+
+  bool has_element_in_scope(string tag_name) {
+    return false;
+  }
+
+  private bool has_element_in_button_scope(string tag_name) {
+    return false;
+  }
+
+  // https://html.spec.whatwg.org/#close-a-p-element
+  private void close_a_p_element() {
+    // 1. Generate implied end tags, except for p elements.
+    generate_implied_end_tags(except_for: "p");
+    // 2. If the current node is not a p element, then this is a parse error.
+    if (current_node is not HTMLElement ele || ele.tag_name != "p") {
+      on_error("parse error");
+      return;
+    }
+    // 3. Pop elements from the stack of open elements until a p element has been popped from the stack.
+    pop_element_until("p");
+  }
+
+  void pop_element_until(string tag_name) {
+    do {
+      pop_current_node();
+    } while (current_node is HTMLElement el && el.tag_name == tag_name);
+    if (current_node != null) {
+      pop_current_node();
+    } 
+  }
+
+  // https://html.spec.whatwg.org/#generate-implied-end-tags
+  private void generate_implied_end_tags(string? except_for = null) {
+    // When the steps below require the UA to generate implied end tags, then, while the current node is a dd element, a dt element, an li element, an optgroup element, an option element, a p element, an rb element, an rp element, an rt element, or an rtc element, the UA must pop the current node off the stack of open elements.
+    if (current_node is HTMLElement ele) {
+      if (ele.tag_name == except_for) {
+        return;
+      }
+      if ((new[] { "dd", "dt", "li", "optgroup", "option", "rb", "rp", "rt", "rtc", "p" }).Contains(ele.tag_name)) {
+        pop_current_node();
+      }
     }
   }
 
@@ -753,7 +981,6 @@ class HTMLParser {
     }
 
     if (token.is_end_tag) {
-      Console.WriteLine($"End tag: {token.tag!.name}");
       pop_current_node();
       _insertion_mode = _original_insertion_mode;
       return;
@@ -767,7 +994,7 @@ class HTMLParser {
       return;
     }
     // 2. Let parser document be el's parser document.
-    var parser_document = el.parser_document; 
+    var parser_document = el.parser_document;
     // 3. Set el's parser document to null.
     el.parser_document = null;
     // 4. If parser document is non-null and el does not have an async attribute, then set el's force async to true.
@@ -928,7 +1155,7 @@ class HTMLParser {
           run_after_after_frameset_mode(_next_token);
           break;
         default:
-        break;
+          break;
       }
     }
   }

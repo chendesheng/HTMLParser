@@ -330,7 +330,6 @@ class Node : EventTarget {
 
   // https://dom.spec.whatwg.org/#concept-node-insert
   private static void insert_node_into_parent_before_child(Node node, Node parent, Node? child) {
-    Console.WriteLine($"insert_node_into_parent_before_child({node}, {parent}, {child}");
     // To insert a node into a parent before a child, with an optional suppress observers flag, run these steps:
     // FIXME: add optional suppress observers flag
 
@@ -363,9 +362,7 @@ class Node : EventTarget {
       adopt_node_into_document(nd, parent.node_document);
       // 2. If child is null, then append node to parent’s children.
       if (child == null) {
-        Console.WriteLine($"append_ordered_set({nd}, {parent._children}");
         append_ordered_set(nd, parent._children);
-        Console.WriteLine($"{parent}.children: {parent._children.Count}");
       } else {
         // 3. Otherwise, insert node into parent’s children before child’s index.
         parent._children.Insert(child.index, nd);
@@ -537,10 +534,14 @@ class Node : EventTarget {
     }
   } 
 
-  protected String to_string(int indent) {
+  protected string to_string(int indent) {
     var sb = new StringBuilder();
     for (var i = 0; i < indent * 2; ++i) sb.Append(' '); 
-    sb.AppendLine($"[{display_name}]");
+    if (this is Text txt) {
+      sb.AppendLine($"[{display_name}: {txt.data.Replace(" ", "\\s").Replace("\n", "\\n").Replace("\t", "\\t").Replace("\r", "\\r")}]");
+    } else {
+      sb.AppendLine($"[{display_name}]");
+    }
     if (has_child_nodes) {
       foreach(var child in _children) {
         sb.Append(child.to_string(indent + 1));
@@ -549,7 +550,7 @@ class Node : EventTarget {
     return sb.ToString();
   }
 
-  public override String ToString() {
+  public override string ToString() {
     return to_string(0);
   }
 
