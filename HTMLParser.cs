@@ -592,6 +592,8 @@ class HTMLParser {
     // Reprocess the current token.
     reprocess_token();
   }
+
+  //https://html.spec.whatwg.org/#parsing-main-inbody
   void run_in_body_mode(HTMLToken token) {
     if (token.is_null_character) {
       // Parse error. Ignore the token.
@@ -686,6 +688,7 @@ class HTMLParser {
 
       // Switch the insertion mode to "after body".
       _insertion_mode = InsertionMode.AfterBody;
+      return;
     }
 
     if (token.is_end_tag_of("html")) {
@@ -1056,7 +1059,36 @@ class HTMLParser {
     throw new NotImplementedException();
   }
   void run_after_body_mode(HTMLToken token) {
-    throw new NotImplementedException();
+    if (token.is_space_character) {
+      run_in_body_mode(token);
+      return;
+    }
+    if (token.is_comment) {
+      insert_a_comment(token);
+      return;
+    }
+    if (token.is_doctype) {
+      on_error("parse error");
+      return;
+    }
+    if (token.is_start_tag_of("html")) {
+      run_in_body_mode(token);
+      return;
+    }
+    if (token.is_end_tag_of("html")) {
+      // If the parser was created as part of the HTML fragment parsing algorithm, this is a parse error; ignore the token. (fragment case)
+      // Otherwise, switch the insertion mode to "after after body".
+      _insertion_mode = InsertionMode.AfterAfterBody;
+      return;
+    }
+    if (token.is_eof) {
+      // Stop parsing.
+      stop_parsing();
+      return;
+    }
+    on_error("parse error");
+    _insertion_mode = InsertionMode.InBody;
+    reprocess_token();
   }
   void run_in_frameset_mode(HTMLToken token) {
     throw new NotImplementedException();
